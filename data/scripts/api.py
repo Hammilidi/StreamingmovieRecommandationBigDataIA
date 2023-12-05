@@ -8,11 +8,10 @@ import os
 import json 
 import requests 
 
-sys.path.append('c:/Users/user/movieRecommandationBigDataIA/data')
-
+sys.path.append('c:/Users/user/StreamingmovieRecommandationBigDataIA/data')
 # Set up Logging Function
 def setup_api_logging():
-    log_directory = "c:/Users/user/movieRecommandationBigDataIA/data/scripts/API_Log_Files"
+    log_directory = "c:/Users/user/StreamingmovieRecommandationBigDataIA/Logs/API_Log_Files"
     os.makedirs(log_directory, exist_ok=True)
 
     # Create a log file with a timestamp in its name
@@ -34,9 +33,9 @@ api_logger = setup_api_logging()
 # Function to read data files
 def read_data_files():
     try:
-        u_data = pd.read_csv('c:/Users/user/movieRecommandationBigDataIA/data/u.data', sep='\t', names=['userId', 'movieId', 'rating', 'timestamp'])
-        u_item = pd.read_csv('c:/Users/user/movieRecommandationBigDataIA/data/u.item', sep='|', encoding='latin-1', header=None, names=['movieId', 'title', 'release_date', 'video_release_date', 'IMDb_URL', 'unknown', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Fantasy', 'Film-Noir', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western'])
-        u_user = pd.read_csv('c:/Users/user/movieRecommandationBigDataIA/data/u.user', sep='|', names=['userId', 'age', 'gender', 'occupation', 'zipcode'])
+        u_data = pd.read_csv('c:/Users/user/StreamingmovieRecommandationBigDataIA/data/u.data', sep='\t', names=['userId', 'movieId', 'rating', 'timestamp'])
+        u_item = pd.read_csv('c:/Users/user/StreamingmovieRecommandationBigDataIA/data/u.item', sep='|', encoding='latin-1', header=None, names=['movieId', 'title', 'release_date', 'video_release_date', 'IMDb_URL', 'unknown', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Fantasy', 'Film-Noir', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western'])
+        u_user = pd.read_csv('c:/Users/user/StreamingmovieRecommandationBigDataIA/data/u.user', sep='|', names=['userId', 'age', 'gender', 'occupation', 'zipcode'])
         return u_data, u_item, u_user
     except Exception as e:
         api_logger.error(f"Error reading data files: {e}")
