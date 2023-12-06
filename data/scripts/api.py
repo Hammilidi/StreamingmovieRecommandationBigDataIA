@@ -8,10 +8,10 @@ import os
 import json 
 import requests 
 
-sys.path.append('c:/Users/user/StreamingmovieRecommandationBigDataIA/data')
+sys.path.append('/home/StreamingmovieRecommandationBigDataIA/data')
 # Set up Logging Function
 def setup_api_logging():
-    log_directory = "c:/Users/user/StreamingmovieRecommandationBigDataIA/Logs/API_Log_Files"
+    log_directory = "/home/StreamingmovieRecommandationBigDataIA/Logs/API_Log_Files"
     os.makedirs(log_directory, exist_ok=True)
 
     # Create a log file with a timestamp in its name
@@ -33,9 +33,9 @@ api_logger = setup_api_logging()
 # Function to read data files
 def read_data_files():
     try:
-        u_data = pd.read_csv('c:/Users/user/StreamingmovieRecommandationBigDataIA/data/u.data', sep='\t', names=['userId', 'movieId', 'rating', 'timestamp'])
-        u_item = pd.read_csv('c:/Users/user/StreamingmovieRecommandationBigDataIA/data/u.item', sep='|', encoding='latin-1', header=None, names=['movieId', 'title', 'release_date', 'video_release_date', 'IMDb_URL', 'unknown', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Fantasy', 'Film-Noir', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western'])
-        u_user = pd.read_csv('c:/Users/user/StreamingmovieRecommandationBigDataIA/data/u.user', sep='|', names=['userId', 'age', 'gender', 'occupation', 'zipcode'])
+        u_data = pd.read_csv('/home/StreamingmovieRecommandationBigDataIA/data/u.data', sep='\t', names=['userId', 'movieId', 'rating', 'timestamp'])
+        u_item = pd.read_csv('/home/StreamingmovieRecommandationBigDataIA/data/u.item', sep='|', encoding='latin-1', header=None, names=['movieId', 'title', 'release_date', 'video_release_date', 'IMDb_URL', 'unknown', 'Action', 'Adventure', 'Animation', 'Children', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Fantasy', 'Film-Noir', 'Horror', 'Musical', 'Mystery', 'Romance', 'Sci-Fi', 'Thriller', 'War', 'Western'])
+        u_user = pd.read_csv('/home/StreamingmovieRecommandationBigDataIA/data/u.user', sep='|', names=['userId', 'age', 'gender', 'occupation', 'zipcode'])
         return u_data, u_item, u_user
     except Exception as e:
         api_logger.error(f"Error reading data files: {e}")
@@ -50,10 +50,15 @@ def extract_genres(row):
 # Function to create JSON entry
 def create_json_entry(row):
     return {
-        "userId": str(row['userId']),
+        "userinfo":{
+            "userId": str(row['userId']),
+            "userage": str(row['age']),
+            "usergender": str(row['gender'])         
+        },
         "movie": {
             "movieId": str(row['movieId']),
             "title": row['title'],
+            "release_date": row['release_date'],
             "genres": row['genres']
         },
         "rating": str(row['rating']),
@@ -74,7 +79,7 @@ def get_movie_data():
         u_item['genres'] = u_item.apply(extract_genres, axis=1)
 
         # Merge relevant data
-        merged_data = pd.merge(u_data, u_item[['movieId', 'title', 'genres']], on='movieId')
+        merged_data = pd.merge(u_data, u_item[['movieId', 'title', 'release_date', 'genres']], on='movieId')
         merged_data = pd.merge(merged_data, u_user[['userId', 'age', 'gender', 'occupation']], on='userId')
 
         # Convert to JSON format and return as a streaming response with a delay

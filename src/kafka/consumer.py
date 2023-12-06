@@ -1,92 +1,141 @@
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, ArrayType, FloatType, TimestampType
+from pyspark.streaming import StreamingContext
 from elasticsearch import Elasticsearch
-from confluent_kafka import Consumer
-import json
-import logging
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import from_json, col
+from datetime import datetime
+import json, logging, os
 
-# Configurer les logs
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
-# Établir la connexion à Elasticsearch
-es = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+# Configuration des logs pour Spark
+def setup_spark_logging():
+    log_directory = "/home/StreamingmovieRecommandationBigDataIA/Logs/Spark_Log_Files"
+    os.makedirs(log_directory, exist_ok=True)
+    log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
+    log_filepath = os.path.join(log_directory, log_filename)
+    logging.basicConfig(filename=log_filepath, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    return logging.getLogger(__name__)
 
-try:
-    def transformer_donnees(message):
-        try:
-            # Convertir le message JSON en dictionnaire Python
-            data = json.loads(message)
+# Initialisation de la session Spark
+spark = SparkSession.builder \
+    .appName("MovieRecommendationStreaming")\
+    .config("spark.streaming.stopGracefullyOnShutdown", True) \
+    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0,org.elasticsearch:elasticsearch-spark-30_2.12:7.15.1") \
+    .getOrCreate()
 
-            # Adapter la structure des données au format attendu par Elasticsearch
-            transformed_data = {
-                "userId": data.get("userId", ""),
-                "movieId": data.get("movie", {}).get("movieId", ""),
-                "title": data.get("movie", {}).get("title", ""),
-                "genres": data.get("movie", {}).get("genres", []),
-                "rating": data.get("rating", ""),
-                "timestamp": data.get("timestamp", "")
-            }
+logger = setup_spark_logging()
 
-            return transformed_data
+# Création du stream direct Kafka en utilisant spark.readStream
+kafkaStream = spark.readStream \
+    .format("kafka") \
+    .option("kafka.bootstrap.servers", "localhost:9092") \
+    .option("subscribe", "movierecommandation") \
+    .option("startingOffsets", "earliest") \
+    .load()
 
-        except Exception as e:
-            logger.error(f"Erreur lors de la transformation des données : {e}")
-            return None
 
-    def inserer_donnees_elasticsearch(data):
-        try:
-            # Insérer les données dans Elasticsearch
-            res = es.index(index='movierecommendation', body=data)
-            logger.info(f"Données insérées avec succès dans Elasticsearch: {res}")
+# Définition du StructType pour le schéma
+schema = StructType([
+    StructField("userinfo", StructType([
+        StructField("userId", StringType(), True),
+        StructField("userage", StringType(), True),
+        StructField("usergender", StringType(), True)
+    ])),
+    StructField("movie", StructType([
+        StructField("movieId", StringType(), True),
+        StructField("title", StringType(), True),
+        StructField("release_date", StringType(), True),
+        StructField("genres", ArrayType(StringType()), True)
+    ])),
+    StructField("rating", StringType(), True),
+    StructField("timestamp", StringType(), True)
+])
+# Parse Kafka messages and apply schema
+parsed_stream = kafkaStream.selectExpr("CAST(value AS STRING)")
+df = parsed_stream.withColumn("values", from_json(parsed_stream["value"], schema))
 
-        except Exception as e:
-            logger.error(f"Une erreur est survenue lors de l'insertion dans Elasticsearch : {e}")
+# Access fields within the struct
+df = df.select("values.*")
 
-    def kafka_consumer():
-        # Configuration du consommateur Kafka
-        consumer_config = {
-            'bootstrap.servers': 'localhost:9092',  # Adresse du broker Kafka
-            'group.id': 'my_group',  # ID du groupe de consommateurs
-            'auto.offset.reset': 'earliest'  # Commencer à consommer depuis le début du topic
-        }
+# Transformation des colonnes pour correspondre au format attendu
+df = df.select(
+    col("userinfo.userId").alias("userId").cast(IntegerType()),
+    col("userinfo.userage").alias("age").cast(IntegerType()),
+    col("userinfo.usergender").alias("gender"),
+    col("movie.movieId").alias("movieId").cast(IntegerType()),
+    col("movie.title").alias("title"),
+    col("movie.release_date").alias("release_date"),
+    col("movie.genres").alias("genres"),
+    col("rating").cast(FloatType()),
+    col("timestamp").cast(TimestampType())
+)
 
-        # Créer une instance du consommateur Kafka
-        consumer = Consumer(consumer_config)
- 
-        # S'abonner au topic Kafka
-        topic = "movierecommendation"  # Remplace avec ton topic Kafka
-        consumer.subscribe([topic])
+# Affichage des résultats dans la console
+console_query = df.writeStream \
+    .outputMode("append") \
+    .format("console") \
+    .start()
 
-        try:
-            logger.info(f"Kafka Consumer Configuration: {consumer_config}")
-            while True:
-                msg = consumer.poll(5.0)  # Consommer les messages, attendre jusqu'à 5 secondes pour de nouveaux messages
+console_query.awaitTermination()
 
-                if msg is None:
-                    logger.info("Aucun nouveau message reçu. Sortie.")
-                    break
-                elif not msg.error():
-                    # Loguer les messages reçus depuis Kafka
-                    logger.info(f"Message reçu depuis Kafka : {msg.value().decode('utf-8')}")
 
-                    # Transformer les données avant de les insérer dans Elasticsearch
-                    transformed_data = transformer_donnees(msg.value().decode('utf-8'))
 
-                    if transformed_data:
-                        inserer_donnees_elasticsearch(transformed_data)
-                    else:
-                        logger.error("Les données n'ont pas été transformées correctement.")
-                else:
-                    logger.error(f"Erreur lors de la consommation de messages : {msg.error()}")
+#----------------------------------------ELASTICSEARCH----------------------------------------------------------------
 
-        except KeyboardInterrupt:
-            logger.info("Arrêt du consommateur Kafka")
-        except Exception as e:
-            logger.error(f"Une erreur inattendue est survenue : {e}")
-        finally:
-            consumer.close()
+# def init_es_connection(cloud_id, username, password):
+#     '''
+#     Initialise la connexion à Elasticsearch en utilisant les informations fournies.
+    
+#     Args:
+#     - cloud_id (str): Identifiant du cluster Elastic Cloud.
+#     - username (str): Nom d'utilisateur pour l'authentification.
+#     - password (str): Mot de passe pour l'authentification.
+    
+#     Returns:
+#     - Elasticsearch: Instance de la connexion Elasticsearch.
+#     '''
+#     es = Elasticsearch(
+#         cloud_id=cloud_id,
+#         http_auth=(username, password)
+#     )
+    
+#     return es
 
-    # Appel du consommateur Kafka
-    kafka_consumer()
+# # Remplacez ces valeurs par les informations de votre cluster Elastic Cloud
+# cloud_id = "movie_recommandation:dXMtY2VudHJhbDEuZ2NwLmNsb3VkLmVzLmlvOjQ0MyQ4OTAxYzljOWNiNTQ0MGJlOWExZDZjZGRiZjFhNGExYSQzMzY1ZGQyNjFjMTA0YzY4OGQwN2QwZTE4M2QwNjI3OA=="
+# username = "elastic"
+# password = "wBrbOPeiGOMO2G0i4R6BHKAs"
 
-except Exception as e:
-    logger.error(f"Une erreur est survenue lors de la connexion à Elasticsearch : {e}")
+# # Initialisation de la connexion
+# es = init_es_connection(cloud_id, username, password)
+
+# # Vérifier la connexion
+# if es.ping():
+#     print("Connecté à Elastic Cloud !")
+# else:
+#     print("La connexion a échoué.")
+    
+# # Création de l'index
+# index_name = "movierecommendation_index"
+
+# if not es.indices.exists(index=index_name):
+#     es.indices.create(index=index_name)
+
+# def insert_to_elasticsearch(df, epoch_id):
+#     try:
+#         # Insérer les données dans Elasticsearch
+#         df.write.format("org.elasticsearch.spark.sql") \
+#             .option("es.resource", "movierecommendation_index/_doc") \
+#             .option("es.nodes.wan.only", "true") \
+#             .mode("append") \
+#             .save()
+
+#     except Exception as e:
+#         logger.error(f"Erreur lors de l'insertion des données dans Elasticsearch : {e}")
+
+# # Appliquer la logique d'insertion à chaque batch du stream
+# df.writeStream \
+#     .foreachBatch(insert_to_elasticsearch) \
+#     .start() \
+#     .awaitTermination()
+

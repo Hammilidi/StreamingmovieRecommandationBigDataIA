@@ -9,15 +9,15 @@ from confluent_kafka.admin import AdminClient, NewTopic
 from datetime import datetime
 import requests 
 
-sys.path.append('c:/Users/user/movieRecommandationBigDataIA/data/') 
-sys.path.append('c:/Users/user/movieRecommandationBigDataIA/data/u.data') 
+sys.path.append('/home/StreamingmovieRecommandationBigDataIA/data/') 
+sys.path.append('/home/StreamingmovieRecommandationBigDataIA/data/u.data') 
 
 # from API import * 
 
 # Set up Loggin Function
 def setup_producer_logging():
 
-    log_directory = "c:/Users/user/StreamingmovieRecommandationBigDataIA/Logs/Producer_Log_Files"
+    log_directory = "/home/StreamingmovieRecommandationBigDataIA/Logs/Producer_Log_Files"
     os.makedirs(log_directory, exist_ok=True)
 
     log_filename = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.log")
