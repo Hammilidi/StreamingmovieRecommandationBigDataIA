@@ -67,16 +67,16 @@ df = df.select(
     col("movie.release_date").alias("release_date"),
     col("movie.genres").alias("genres"),
     col("rating").cast(FloatType()),
-    col("timestamp").cast(TimestampType())
+    col("timestamp")
 )
 
-# Affichage des résultats dans la console
-console_query = df.writeStream \
-    .outputMode("append") \
-    .format("console") \
-    .start()
+# # Affichage des résultats dans la console
+# console_query = df.writeStream \
+#     .outputMode("append") \
+#     .format("console") \
+#     .start()
 
-console_query.awaitTermination()
+# console_query.awaitTermination()
 
 
 
@@ -109,33 +109,38 @@ console_query.awaitTermination()
 # # Initialisation de la connexion
 # es = init_es_connection(cloud_id, username, password)
 
-# # Vérifier la connexion
-# if es.ping():
-#     print("Connecté à Elastic Cloud !")
-# else:
-#     print("La connexion a échoué.")
-    
-# # Création de l'index
-# index_name = "movierecommendation_index"
 
-# if not es.indices.exists(index=index_name):
-#     es.indices.create(index=index_name)
 
-# def insert_to_elasticsearch(df, epoch_id):
-#     try:
-#         # Insérer les données dans Elasticsearch
-#         df.write.format("org.elasticsearch.spark.sql") \
-#             .option("es.resource", "movierecommendation_index/_doc") \
-#             .option("es.nodes.wan.only", "true") \
-#             .mode("append") \
-#             .save()
+# Connexion à Elasticsearch
+es = Elasticsearch([{'host': 'localhost', 'port': 9200, 'scheme': 'http'}])
 
-#     except Exception as e:
-#         logger.error(f"Erreur lors de l'insertion des données dans Elasticsearch : {e}")
+# Vérification de la connexion
+if es.ping():
+    print("Connecté à Elasticsearch !")
+else:
+    print("Échec de la connexion à Elasticsearch.")
 
-# # Appliquer la logique d'insertion à chaque batch du stream
-# df.writeStream \
-#     .foreachBatch(insert_to_elasticsearch) \
-#     .start() \
-#     .awaitTermination()
+# Création de l'index
+index_name = "movierecommendation_index"
+
+if not es.indices.exists(index=index_name):
+    es.indices.create(index=index_name)
+
+def insert_to_elasticsearch(df, epoch_id):
+    try:
+        # Insérer les données dans Elasticsearch
+        df.write.format("org.elasticsearch.spark.sql") \
+            .option("es.resource", "movierecommendation_index/_doc") \
+            .option("es.nodes.wan.only", "true") \
+            .mode("append") \
+            .save()
+
+    except Exception as e:
+        logger.error(f"Erreur lors de l'insertion des données dans Elasticsearch : {e}")
+
+# Appliquer la logique d'insertion à chaque batch du stream
+df.writeStream \
+    .foreachBatch(insert_to_elasticsearch) \
+    .start() \
+    .awaitTermination()
 
