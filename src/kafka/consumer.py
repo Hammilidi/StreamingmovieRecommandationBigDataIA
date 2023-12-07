@@ -1,8 +1,8 @@
-from pyspark.sql.types import StructType, StructField, StringType, IntegerType, ArrayType, FloatType, TimestampType
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType, ArrayType, FloatType, TimestampType, LongType
 from pyspark.streaming import StreamingContext
 from elasticsearch import Elasticsearch
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col
+from pyspark.sql.functions import from_json, col, to_timestamp, to_date, from_unixtime
 from datetime import datetime
 import json, logging, os
 
@@ -64,11 +64,15 @@ df = df.select(
     col("userinfo.usergender").alias("gender"),
     col("movie.movieId").alias("movieId").cast(IntegerType()),
     col("movie.title").alias("title"),
-    col("movie.release_date").alias("release_date"),
     col("movie.genres").alias("genres"),
     col("rating").cast(FloatType()),
     col("timestamp")
 )
+df = df.withColumn("timestamp", from_unixtime(df["timestamp"] / 1000, "yyyy-MM-dd HH:mm:ss"))
+df = df.withColumn("timestamp", to_timestamp(df["timestamp"], "yyyy-MM-dd HH:mm:ss"))
+
+
+
 
 # # Affichage des résultats dans la console
 # console_query = df.writeStream \
@@ -130,7 +134,7 @@ def insert_to_elasticsearch(df, epoch_id):
     try:
         # Insérer les données dans Elasticsearch
         df.write.format("org.elasticsearch.spark.sql") \
-            .option("es.resource", "movierecommendation_index/_doc") \
+            .option("es.resource",index_name) \
             .option("es.nodes.wan.only", "true") \
             .mode("append") \
             .save()
@@ -143,4 +147,6 @@ df.writeStream \
     .foreachBatch(insert_to_elasticsearch) \
     .start() \
     .awaitTermination()
+
+
 
